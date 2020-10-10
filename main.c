@@ -11,12 +11,12 @@
 #include <string.h>
 #include "graphics.h"
 
-#define printf	pspDebugScreenPrintf
 #define MAX(X, Y) ((X) > (Y) ? (X) : (Y))
 
 PSP_MODULE_INFO("FlashMod", 0, 1, 1);
 
 int exist = 0;
+char write_buffer[128*1024];
 
 int exit_callback(int arg1, int arg2, void *common);
 
@@ -24,264 +24,519 @@ int CallbackThread(SceSize args, void *argp);
 
 int SetupCallbacks(void);
 
-void screenblit(int posx, int posy, int sizex, int sizey, Image* imagevar);
-
-void lookforumd();
-
-char write_buffer[128*1024];
-
 void check(const char* zFile);
 
-void write_file(const char *readpath, const char *writepath);
+void write_file(const char *readpath, const char *writepath, Image* write, Image* writecomplete, Image* writefailed);
 
 int main() {
 	SetupCallbacks();
 	initGraphics();
 
-	int C = 0;
+	int cwait;
+	char copyright_buffer[200]; Image* copyright;
+	sprintf(copyright_buffer, "./Images/Copyright.png"); copyright = loadImage(copyright_buffer);
+	blitAlphaImageToScreen(0, 0, 480, 272, copyright, 0, 0);
+	flipScreen();
 
-	char copyright_buffer[200];
-	Image* copyright;
-	sprintf(copyright_buffer, "./Images/Copyright.png");
-	copyright = loadImage(copyright_buffer);
-
-	while(C < 50){
-		screenblit(0, 0, 480, 272, copyright);
-		flipScreen();
-		C++;
+	for(cwait=0; cwait<50; cwait++) {
 	}
 
-	int i = 0; int h = 0; SceCtrlData pad; int menu = 1; int fd;
-	char menu_one_buffer[200]; char menu_two_buffer[200]; char menu_three_buffer[200]; char menu_four_buffer[200]; char menu_five_buffer[200]; char menu_six_buffer[200]; char menu_seven_buffer[200]; char menu_eight_buffer[200]; char menu_nine_buffer[200]; char flash_complete_buffer[200]; char insert_umd_buffer[200];
-        Image* menu_one; Image* menu_two; Image* menu_three; Image* menu_four; Image* menu_five; Image* menu_six; Image* menu_seven; Image* menu_eight; Image* menu_nine; Image* flash_complete; Image* insert_umd;
+	int UMDcheck = 0; int XMBmenu = 1; int xmbselect = 30; int UMDmenu = 1; int umdselect = 30; int PSIXmenu = 1; int psixselect = 30; int dialogbox = 1; int taskbarx = 480; int statusbary = 272; int mainmenu2 = 1; int mainmenu = 1; int wait = 0; SceCtrlData pad;
+
+	scePowerSetClockFrequency(333, 333, 166);
+
+	char desktop_buffer[200]; Image* desktop;
+
+	sprintf(desktop_buffer, "./Images/Desktop.png"); desktop = loadImage(desktop_buffer);
+	blitAlphaImageToScreen(0, 0, 480, 272, desktop, 0, 0);
+	flipScreen();
 
 	sceCtrlSetSamplingCycle(0);
-	sceCtrlSetSamplingMode(PSP_CTRL_MODE_DIGITAL);
-
+	sceCtrlSetSamplingMode(PSP_CTRL_MODE_ANALOG);
 	sceIoUnassign("flash0:"); 
 	sceIoAssign("flash0:", "lflash0:0,0", "flashfat0:", 0, NULL, 0);
 
-	sprintf(menu_one_buffer,"./Images/Menu1.png"); sprintf(menu_two_buffer,"./Images/Menu2.png"); sprintf(menu_three_buffer,"./Images/Menu3.png"); sprintf(menu_four_buffer,"./Images/Menu4.png"); sprintf(menu_five_buffer,"./Images/Menu5.png"); sprintf(menu_six_buffer,"./Images/Menu6.png"); sprintf(menu_seven_buffer,"./Images/Menu7.png"); sprintf(menu_eight_buffer,"./Images/Menu8.png"); sprintf(menu_nine_buffer,"./Images/Menu9.png"); sprintf(flash_complete_buffer,"./Images/FlashComplete.png"); sprintf(insert_umd_buffer,"./Images/UMD.png");
-	menu_one = loadImage(menu_one_buffer); menu_two = loadImage(menu_two_buffer); menu_three = loadImage(menu_three_buffer); menu_four = loadImage(menu_four_buffer); menu_five = loadImage(menu_five_buffer); menu_six = loadImage(menu_six_buffer); menu_seven = loadImage(menu_seven_buffer); menu_eight = loadImage(menu_eight_buffer); menu_nine = loadImage(menu_nine_buffer); flash_complete = loadImage(flash_complete_buffer); insert_umd = loadImage(insert_umd_buffer);
+	char flashingstatusbar_buffer[200]; Image* flashingstatusbar;
+	char failedstatusbar_buffer[200]; Image* failedstatusbar;
+	char completestatusbar_buffer[200]; Image* completestatusbar;
+	char statusbar_buffer[200]; Image* statusbar;
+	char exiton_buffer[200]; Image* exiton;
+	char exit_buffer[200]; Image* exit;
+	char taskbar0_buffer[200]; Image* taskbar0;
+	char taskbar1_buffer[200]; Image* taskbar1;
+	char taskbar2_buffer[200]; Image* taskbar2;
+	char taskbar3_buffer[200]; Image* taskbar3;
+	char umd_buffer[200]; Image* umd;
+	char umdmenu_buffer[200]; Image* umdmenu;
+	char xmb_buffer[200]; Image* xmb;
+	char xmbmenu_buffer[200]; Image* xmbmenu;
+	char psix_buffer[200]; Image* psix;
+	char psixmenu_buffer[200]; Image* psixmenu;
+	char select_buffer[200]; Image* select;
+	char insertumd_buffer[200]; Image* insertumd;
 
-	screenblit(0, 0, 480, 272, menu_one);
-		
-	while (1) {
+	sprintf(flashingstatusbar_buffer, "./Images/FlashingStatusbar.png"); flashingstatusbar = loadImage(flashingstatusbar_buffer);
+	sprintf(failedstatusbar_buffer, "./Images/FailedStatusbar.png"); failedstatusbar = loadImage(failedstatusbar_buffer);
+	sprintf(completestatusbar_buffer, "./Images/CompleteStatusbar.png"); completestatusbar = loadImage(completestatusbar_buffer);
+	sprintf(statusbar_buffer, "./Images/Statusbar.png"); statusbar = loadImage(statusbar_buffer);
+	sprintf(exiton_buffer, "./Images/Exiton.png"); exiton = loadImage(exiton_buffer);  
+	sprintf(exit_buffer, "./Images/Exit.png"); exit = loadImage(exit_buffer); 
+	sprintf(taskbar0_buffer, "./Images/Taskbar0.png"); taskbar0 = loadImage(taskbar0_buffer); 	
+	sprintf(taskbar1_buffer, "./Images/Taskbar1.png"); taskbar1 = loadImage(taskbar1_buffer);		 
+	sprintf(taskbar2_buffer, "./Images/Taskbar2.png"); taskbar2 = loadImage(taskbar2_buffer); 
+	sprintf(taskbar3_buffer, "./Images/Taskbar3.png"); taskbar3 = loadImage(taskbar3_buffer);
+	sprintf(umd_buffer, "./Images/UMD.png"); umd = loadImage(umd_buffer);		 
+	sprintf(umdmenu_buffer, "./Images/UMDMenu.png"); umdmenu = loadImage(umdmenu_buffer);
+	sprintf(xmb_buffer, "./Images/XMB.png"); xmb = loadImage(xmb_buffer); 
+	sprintf(xmbmenu_buffer, "./Images/XMBMenu.png"); xmbmenu = loadImage(xmbmenu_buffer); 
+	sprintf(psix_buffer, "./Images/PSIX.png"); psix = loadImage(psix_buffer);
+	sprintf(psixmenu_buffer, "./Images/PSIXMenu.png"); psixmenu = loadImage(psixmenu_buffer);
+	sprintf(select_buffer, "./Images/Select.png"); select = loadImage(select_buffer);
+	sprintf(insertumd_buffer, "./Images/InsertUMD.png"); insertumd = loadImage(insertumd_buffer);  
+
+	while(1){
 		sceCtrlReadBufferPositive(&pad, 1);
-
-		if (menu == 1) {
-			screenblit(0, 0, 480, 272, menu_one);
-			flipScreen();
-		}
-		
-		if (menu == 2) {
-			screenblit(0, 0, 480, 272, menu_two);
-			flipScreen();
-		}
-
-		if (menu == 3) {
-			screenblit(0, 0, 480, 272, menu_three);
-			flipScreen();
-		}
-		
-		if (menu == 4) {
-			screenblit(0, 0, 480, 272, menu_four);
-			flipScreen();
-		}
-
-		if (menu == 5) {
-			screenblit(0, 0, 480, 272, menu_five);
-			flipScreen();
-		}
-
-		if (menu == 6) {
-			screenblit(0, 0, 480, 272, menu_six);
-			flipScreen();
-		}
-
-		if (menu == 7) {
-			screenblit(0, 0, 480, 272, menu_seven);
-			flipScreen();
-		}
-
-		if (menu == 8) {
-			screenblit(0, 0, 480, 272, menu_eight);
-			flipScreen();
-		}
-
-		if (menu == 9) {
-			screenblit(0, 0, 480, 272, menu_nine);
-			flipScreen();
-		}
-		
-		if (pad.Buttons & PSP_CTRL_UP) {
-			if (menu > 1) {
-				menu--;
-			        for(i=0; i<10; i++) {
-		                	sceDisplayWaitVblankStart();
+		blitAlphaImageToScreen(0, 0, 480, 272, desktop, 0, 0);
+		if(dialogbox == 1) {
+			if(taskbarx > 374) {
+				if(statusbary == 244) { blitAlphaImageToScreen(0, 0, 50, 25, exit, 269, statusbary); blitAlphaImageToScreen(0, 0, 266, 25, statusbar, 3, statusbary);}
+				if(statusbary > 244) {
+					blitAlphaImageToScreen(0, 0, 266, 25, statusbar, 3, statusbary);
+					blitAlphaImageToScreen(0, 0, 50, 25, exit, 269, statusbary);
+					statusbary--;
 				}
-          		}
-		}
+				blitAlphaImageToScreen(0, 0, 106, 272, taskbar1, taskbarx, 0);
+				taskbarx--;
+			}
+			if(taskbarx == 374) {	
+				if(mainmenu2 == 1) {
+					blitAlphaImageToScreen(0, 0, 266, 25, statusbar, 3, 244);
+					blitAlphaImageToScreen(0, 0, 50, 25, exit, 269, 244);
+					if(mainmenu == 1)blitAlphaImageToScreen(0, 0, 106, 272, taskbar1, 374, 0);
+					if(mainmenu == 2)blitAlphaImageToScreen(0, 0, 106, 272, taskbar2, 374, 0);
+					if(mainmenu == 3)blitAlphaImageToScreen(0, 0, 106, 272, taskbar3, 374, 0);
+				}
+				if(mainmenu2 == 2) {
+					blitAlphaImageToScreen(0, 0, 100, 272, taskbar0, 380, 0);
+					blitAlphaImageToScreen(0, 0, 266, 25, statusbar, 3, 244); 
+					blitAlphaImageToScreen(0, 0, 50, 25, exiton, 269, 244);
+				}
+				
+				if (pad.Buttons & PSP_CTRL_UP) {
+					if (mainmenu2 == 1) {
+						if (mainmenu > 1) {
+							mainmenu--;
+							for(wait=0; wait<7; wait++) {
+								sceDisplayWaitVblankStart();
+							}
+						}
+					}
+				}	
 
-		if (pad.Buttons & PSP_CTRL_DOWN) {
-			if (menu < 9) {
-				menu++;
-			        for(i=0; i<10; i++) {
-		                	sceDisplayWaitVblankStart();
+				if (pad.Buttons & PSP_CTRL_DOWN) {
+					if (mainmenu2 == 1) {
+						if (mainmenu < 3) {
+							mainmenu++;
+							for(wait=0; wait<7; wait++) {
+								sceDisplayWaitVblankStart();
+							}
+						}
+					}
+				}
+				if (pad.Buttons & PSP_CTRL_LEFT) {
+					mainmenu2 = 2;
+					for(wait=0; wait<7; wait++) {
+						 sceDisplayWaitVblankStart();
+					}
+				}
+				if (pad.Buttons & PSP_CTRL_RIGHT) {
+					mainmenu2 = 1;
+					for(wait=0; wait<7; wait++) {
+						 sceDisplayWaitVblankStart();
+					}
+				}
+				if (pad.Buttons & PSP_CTRL_CROSS) {
+					if (mainmenu2 == 2) break;
+					if (mainmenu2 == 1) {
+						if (mainmenu == 1) dialogbox = 2;
+						if (mainmenu == 2) dialogbox = 3;
+						if (mainmenu == 3) dialogbox = 4;
+					}
 				}
 			}
 		}
+		if(dialogbox == 2) {
+			if(UMDmenu == 1) {
+				umdselect = 29;
+				blitAlphaImageToScreen(0, 0, 50, 25, exit, 269, 244);	
+			}
+			if(UMDmenu == 2) {
+				umdselect = 39;
+				blitAlphaImageToScreen(0, 0, 50, 25, exit, 269, 244);	
+			}
+			if(UMDmenu == 3) {
+				umdselect = 52;
+				blitAlphaImageToScreen(0, 0, 50, 25, exit, 269, 244);	
+			}
+			if(UMDmenu == 4) {
+				umdselect = 62;
+				blitAlphaImageToScreen(0, 0, 50, 25, exit, 269, 244);	
+			}
+			if(UMDmenu == 5) {
+				umdselect = 480;
+				blitAlphaImageToScreen(0, 0, 50, 25, exiton, 269, 244);
+			}
 
-		if (pad.Buttons & PSP_CTRL_CROSS) {
-			if (menu == 1) {
-				
-				h = sceUmdCheckMedium(0);		
+			blitAlphaImageToScreen(0, 0, 266, 25, statusbar, 3, 244);
+			blitAlphaImageToScreen(0, 0, 106, 272, taskbar1, 374, 0);
+			blitAlphaImageToScreen(0, 0, 374, 243, umd, 3, 3);
+			blitAlphaImageToScreen(0, 0, 215, 10, select, 24, umdselect);
+			blitAlphaImageToScreen(0, 0, 374, 243, umdmenu, 3, 3);
+
+			if (pad.Buttons & PSP_CTRL_DOWN) {
+				if (UMDmenu < 5) {
+					UMDmenu++;
+					for(wait=0; wait<7; wait++) {
+						sceDisplayWaitVblankStart();
+					}
+				}
+			}
+			if (pad.Buttons & PSP_CTRL_UP) {
+				if (UMDmenu > 1) {
+					UMDmenu--;
+					for(wait=0; wait<7; wait++) {
+						sceDisplayWaitVblankStart();
+					}
+				}
+			}
+
+			if (pad.Buttons & PSP_CTRL_CROSS) {
+				if (UMDmenu == 1) {
+					UMDcheck = sceUmdCheckMedium(0);
+
+					if (UMDcheck == 0) { 		
+						blitAlphaImageToScreen(0, 0, 480, 272, insertumd, 0, 0);
+						flipScreen();
+					}
+					
+					while (UMDcheck == 0) {
+						UMDcheck = sceUmdCheckMedium(0);
+					}
 	
-				if (h == 0) { 
-			
-					screenblit(0,0,480,272,insert_umd);
-					flipScreen();
-				}
+					UMDcheck = sceUmdActivate(1, "disc0:");
+					
+					
+					sceIoUnassign("flash0:");
+					sceIoUnassign("flash1:");
+					sceIoAssign("flash0:", "msstor0p1:/" , "fatms0:/f0/", IOASSIGN_RDWR, NULL, 0);
+					sceIoAssign("flash1:", "msstor0p1:/" , "fatms0:/f1/", IOASSIGN_RDWR, NULL, 0);
 
-				while (h == 0) {
-					h = sceUmdCheckMedium(0);
-				}
-
-				h = sceUmdActivate(1, "disc0:");
-
-				sceIoUnassign("flash0:");
-				sceIoUnassign("flash1:");
-				sceIoAssign("flash0:", "msstor0p1:/" , "fatms0:/Flash0/", IOASSIGN_RDWR, NULL, 0);
-				sceIoAssign("flash1:", "msstor0p1:/" , "fatms0:/Flash1/", IOASSIGN_RDWR, NULL, 0);
-
-				scePowerSetClockFrequency(333, 333, 166);
-
-				fd = sceIoOpen("disc0:/UMD_DATA.BIN", PSP_O_RDONLY, 0777);
-
-				char game_id[10];
-				sceIoRead(fd, game_id, 10);
-				sceIoClose(fd);
-
-				fd = sceIoOpen("./GAMES/UCUS-98615/UMD_DATA.BIN", PSP_O_RDONLY, 0777);
-
-				char socom_game_id[10];
-				sceIoRead(fd, socom_game_id, 10);
-				sceIoClose(fd);
-
-				if(game_id == socom_game_id) {
-					sceKernelLoadExec("./GAMES/UCUS-98615/BOOT.BIN",0);
-				}
-				else
-				{
+					scePowerSetClockFrequency(333, 333, 166);
+					
 					sceKernelLoadExec("disc0:/PSP_GAME/SYSDIR/BOOT.BIN",0);
 				}
-			}
-			if (menu == 2) {
-				h = sceUmdCheckMedium(0);		
+				if (UMDmenu == 2) {
+					UMDcheck = sceUmdCheckMedium(0);
+
+					if (UMDcheck == 0) { 		
+						blitAlphaImageToScreen(0, 0, 480, 272, insertumd, 0, 0);
+						flipScreen();
+					}
+					
+					while (UMDcheck == 0) {
+						UMDcheck = sceUmdCheckMedium(0);
+					}
 	
-				if (h == 0) { 
+					UMDcheck = sceUmdActivate(1, "disc0:");
+					
+					
+					sceIoUnassign("flash0:");
+					sceIoUnassign("flash1:");
+					sceIoAssign("flash0:", "msstor0p1:/" , "fatms0:/f0/", IOASSIGN_RDWR, NULL, 0);
+					sceIoAssign("flash1:", "msstor0p1:/" , "fatms0:/f1/", IOASSIGN_RDWR, NULL, 0);
+
+					scePowerSetClockFrequency(266, 266, 133);
+
+					sceKernelLoadExec("disc0:/PSP_GAME/SYSDIR/BOOT.BIN",0);
+				}
+				if (UMDmenu == 3) {
+					UMDcheck = sceUmdCheckMedium(0);
+
+					if (UMDcheck == 0) { 		
+						blitAlphaImageToScreen(0, 0, 480, 272, insertumd, 0, 0);
+						flipScreen();
+					}
+					
+					while (UMDcheck == 0) {
+						UMDcheck = sceUmdCheckMedium(0);
+					}
+	
+					UMDcheck = sceUmdActivate(1, "disc0:");
+
+					scePowerSetClockFrequency(333, 333, 166);
+
+					sceKernelLoadExec("disc0:/PSP_GAME/SYSDIR/BOOT.BIN",0);
+				}
+				if (UMDmenu == 4) {
+					UMDcheck = sceUmdCheckMedium(0);
+
+					if (UMDcheck == 0) { 		
+						blitAlphaImageToScreen(0, 0, 480, 272, insertumd, 0, 0);
+						flipScreen();
+					}
+					
+					while (UMDcheck == 0) {
+						UMDcheck = sceUmdCheckMedium(0);
+					}
+	
+					UMDcheck = sceUmdActivate(1, "disc0:");
+
+					scePowerSetClockFrequency(266, 266, 133);
+
+					sceKernelLoadExec("disc0:/PSP_GAME/SYSDIR/BOOT.BIN",0);
+				}
+				if (UMDmenu == 5) break;
+			}
+
+			if (pad.Buttons & PSP_CTRL_CIRCLE) dialogbox = 5;
+		}
+   
+		if(dialogbox == 3) {
+			if(XMBmenu == 1) {
+				xmbselect = 29;
+				blitAlphaImageToScreen(0, 0, 50, 25, exit, 269, 244);	
+			}
+			if(XMBmenu == 2) {
+				xmbselect = 39;
+				blitAlphaImageToScreen(0, 0, 50, 25, exit, 269, 244);	
+			}
+			if(XMBmenu == 3) {
+				xmbselect = 52;
+				blitAlphaImageToScreen(0, 0, 50, 25, exit, 269, 244);	
+			}
+			if(XMBmenu == 4) {
+				xmbselect = 62;
+				blitAlphaImageToScreen(0, 0, 50, 25, exit, 269, 244);	
+			}
+			if(XMBmenu == 5) {
+				xmbselect = 75;
+				blitAlphaImageToScreen(0, 0, 50, 25, exit, 269, 244);	
+			}
+			if(XMBmenu == 6) {
+				xmbselect = 85;
+				blitAlphaImageToScreen(0, 0, 50, 25, exit, 269, 244);	
+			}
+			if(XMBmenu == 7) {
+				xmbselect = 98;
+				blitAlphaImageToScreen(0, 0, 50, 25, exit, 269, 244);	
+			}
+			if(XMBmenu == 8) {
+				xmbselect = 108;
+				blitAlphaImageToScreen(0, 0, 50, 25, exit, 269, 244);	
+			}
+			if(XMBmenu == 9) {
+				xmbselect = 480;
+				blitAlphaImageToScreen(0, 0, 50, 25, exiton, 269, 244);
+			}
+
+			blitAlphaImageToScreen(0, 0, 266, 25, statusbar, 3, 244);
+			blitAlphaImageToScreen(0, 0, 106, 272, taskbar2, 374, 0);
+			blitAlphaImageToScreen(0, 0, 374, 243, xmb, 3, 3);
+			blitAlphaImageToScreen(0, 0, 215, 10, select, 24, xmbselect);
+			blitAlphaImageToScreen(0, 0, 374, 243, xmbmenu, 3, 3);
+
+			if (pad.Buttons & PSP_CTRL_DOWN) {
+				if (XMBmenu < 9) {
+					XMBmenu++;
+					for(wait=0; wait<7; wait++) {
+						sceDisplayWaitVblankStart();
+					}
+				}
+			}
+			if (pad.Buttons & PSP_CTRL_UP) {
+				if (XMBmenu > 1) {
+					XMBmenu--;
+					for(wait=0; wait<7; wait++) {
+						sceDisplayWaitVblankStart();
+					}
+				}
+			}
+
+			if (pad.Buttons & PSP_CTRL_CROSS) {
+				if (XMBmenu == 1) write_file("./WAVE_EFFECT/ON/system_plugin_bg.rco","flash0:/vsh/resource/system_plugin_bg.rco", flashingstatusbar, completestatusbar, failedstatusbar);
+				if (XMBmenu == 2) write_file("./WAVE_EFFECT/OFF/system_plugin_bg.rco","flash0:/vsh/resource/system_plugin_bg.rco", flashingstatusbar, completestatusbar, failedstatusbar);
+				if (XMBmenu == 3) {
+					write_file("ms0:/01.bmp","flash0:/vsh/resource/01.bmp", flashingstatusbar, completestatusbar, failedstatusbar);
+					write_file("ms0:/02.bmp","flash0:/vsh/resource/02.bmp", flashingstatusbar, completestatusbar, failedstatusbar);
+					write_file("ms0:/03.bmp","flash0:/vsh/resource/03.bmp", flashingstatusbar, completestatusbar, failedstatusbar);
+					write_file("ms0:/04.bmp","flash0:/vsh/resource/04.bmp", flashingstatusbar, completestatusbar, failedstatusbar);
+					write_file("ms0:/05.bmp","flash0:/vsh/resource/05.bmp", flashingstatusbar, completestatusbar, failedstatusbar);
+					write_file("ms0:/06.bmp","flash0:/vsh/resource/06.bmp", flashingstatusbar, completestatusbar, failedstatusbar);
+					write_file("ms0:/07.bmp","flash0:/vsh/resource/07.bmp", flashingstatusbar, completestatusbar, failedstatusbar);
+					write_file("ms0:/08.bmp","flash0:/vsh/resource/08.bmp", flashingstatusbar, completestatusbar, failedstatusbar);
+					write_file("ms0:/09.bmp","flash0:/vsh/resource/09.bmp", flashingstatusbar, completestatusbar, failedstatusbar);
+					write_file("ms0:/10.bmp","flash0:/vsh/resource/10.bmp", flashingstatusbar, completestatusbar, failedstatusbar);
+					write_file("ms0:/11.bmp","flash0:/vsh/resource/11.bmp", flashingstatusbar, completestatusbar, failedstatusbar);
+					write_file("ms0:/12.bmp","flash0:/vsh/resource/12.bmp", flashingstatusbar, completestatusbar, failedstatusbar);
+				}
+				if (XMBmenu == 4) {
+					write_file("./DEFAULT_BG/01.bmp","flash0:/vsh/resource/01.bmp", flashingstatusbar, completestatusbar, failedstatusbar);
+					write_file("./DEFAULT_BG/02.bmp","flash0:/vsh/resource/02.bmp", flashingstatusbar, completestatusbar, failedstatusbar);
+					write_file("./DEFAULT_BG/03.bmp","flash0:/vsh/resource/03.bmp", flashingstatusbar, completestatusbar, failedstatusbar);
+					write_file("./DEFAULT_BG/04.bmp","flash0:/vsh/resource/04.bmp", flashingstatusbar, completestatusbar, failedstatusbar);
+					write_file("./DEFAULT_BG/05.bmp","flash0:/vsh/resource/05.bmp", flashingstatusbar, completestatusbar, failedstatusbar);
+					write_file("./DEFAULT_BG/06.bmp","flash0:/vsh/resource/06.bmp", flashingstatusbar, completestatusbar, failedstatusbar);
+					write_file("./DEFAULT_BG/07.bmp","flash0:/vsh/resource/07.bmp", flashingstatusbar, completestatusbar, failedstatusbar);
+					write_file("./DEFAULT_BG/08.bmp","flash0:/vsh/resource/08.bmp", flashingstatusbar, completestatusbar, failedstatusbar);
+					write_file("./DEFAULT_BG/09.bmp","flash0:/vsh/resource/09.bmp", flashingstatusbar, completestatusbar, failedstatusbar);
+					write_file("./DEFAULT_BG/10.bmp","flash0:/vsh/resource/10.bmp", flashingstatusbar, completestatusbar, failedstatusbar);
+					write_file("./DEFAULT_BG/11.bmp","flash0:/vsh/resource/11.bmp", flashingstatusbar, completestatusbar, failedstatusbar);
+					write_file("./DEFAULT_BG/12.bmp","flash0:/vsh/resource/12.bmp", flashingstatusbar, completestatusbar, failedstatusbar);
+				}
+				if (XMBmenu == 5) {
+					write_file("ms0:/topmenu_plugin.rco","flash0:/vsh/resource/topmenu_plugin.rco", flashingstatusbar, completestatusbar, failedstatusbar);
+				}
+				if (XMBmenu == 6) {
+					write_file("./DEFAULT_MENU/topmenu_plugin.rco","flash0:/vsh/resource/topmenu_plugin.rco", flashingstatusbar, completestatusbar, failedstatusbar);
+				}
+				if (XMBmenu == 7) {
+					write_file("./CORRUPTED_ICON/ON/game_plugin.rco","flash0:/vsh/resource/game_plugin.rco", flashingstatusbar, completestatusbar, failedstatusbar);
+				}
+				if (XMBmenu == 8) {
+					write_file("./CORRUPTED_ICON/OFF/game_plugin.rco","flash0:/vsh/resource/game_plugin.rco", flashingstatusbar, completestatusbar, failedstatusbar);
+				}
+				if (XMBmenu == 9) break;
+			}
+
+			if (pad.Buttons & PSP_CTRL_CIRCLE) dialogbox = 5;
+		}
+		if(dialogbox == 4) {
+			if(PSIXmenu == 1) {
+				psixselect = 29;
+				blitAlphaImageToScreen(0, 0, 50, 25, exit, 269, 244);	
+			}
+			if(PSIXmenu == 2) {
+				psixselect = 39;
+				blitAlphaImageToScreen(0, 0, 50, 25, exit, 269, 244);	
+			}
+			if(PSIXmenu == 3) {
+				psixselect = 52;
+				blitAlphaImageToScreen(0, 0, 50, 25, exit, 269, 244);	
+			}
+			if(PSIXmenu == 4) {
+				psixselect = 62;
+				blitAlphaImageToScreen(0, 0, 50, 25, exit, 269, 244);	
+			}
+			if(PSIXmenu == 5) {
+				psixselect = 480;
+				blitAlphaImageToScreen(0, 0, 50, 25, exiton, 269, 244);
+			}
+			blitAlphaImageToScreen(0, 0, 374, 25, statusbar, 3, 244);
+			blitAlphaImageToScreen(0, 0, 106, 272, taskbar3, 374, 0);
+			blitAlphaImageToScreen(0, 0, 374, 243, psix, 3, 3);
+			blitAlphaImageToScreen(0, 0, 215, 10, select, 24, psixselect);
+			blitAlphaImageToScreen(0, 0, 374, 243, psixmenu, 3, 3);
+			if (pad.Buttons & PSP_CTRL_DOWN) {
+				if (PSIXmenu < 5) {
+					PSIXmenu++;
+					for(wait=0; wait<7; wait++) {
+						sceDisplayWaitVblankStart();
+					}
+				}
+			}
+			if (pad.Buttons & PSP_CTRL_UP) {
+				if (PSIXmenu > 1) {
+					PSIXmenu--;
+					for(wait=0; wait<7; wait++) {
+						sceDisplayWaitVblankStart();
+					}
+				}
+			}
+
+			if (pad.Buttons & PSP_CTRL_CROSS) {
+				if (PSIXmenu == 1) {
+					write_file("./PSIX_VERSION/100_PSP/EBOOT.PBP","ms0:/PSP/GAME/psix/EBOOT.PBP", flashingstatusbar, completestatusbar, failedstatusbar);
+				}
+				if (PSIXmenu == 2) {
+					write_file("./PSIX_VERSION/150_PSP/EBOOT.PBP","ms0:/PSP/GAME/psix/EBOOT.PBP", flashingstatusbar, completestatusbar, failedstatusbar);
+				}
+				if (PSIXmenu == 3) {
+					write_file("ms0:/background.png","ms0:/PSP/GAME/psix/background.png", flashingstatusbar, completestatusbar, failedstatusbar);
+					write_file("ms0:/background.jpg","ms0:/PSP/GAME/psix/background.jpg", flashingstatusbar, completestatusbar, failedstatusbar);
+				}
+				if (PSIXmenu == 4) {
+					sceIoRemove("ms0:/PSP/GAME/psix/background.png");
+					sceIoRemove("ms0:/PSP/GAME/psix/background.jpg");
+				}
+				if (PSIXmenu == 5) break;
+			}
+
+			if (pad.Buttons & PSP_CTRL_CIRCLE) dialogbox = 5;
+		}
+		if(dialogbox == 5) {
+			if(mainmenu2 == 1) {
+				blitAlphaImageToScreen(0, 0, 266, 25, statusbar, 3, 244);
+				blitAlphaImageToScreen(0, 0, 50, 28, exit, 269, 244);
+				if(mainmenu == 1)blitAlphaImageToScreen(0, 0, 106, 272, taskbar1, 374, 0);
+				if(mainmenu == 2)blitAlphaImageToScreen(0, 0, 106, 272, taskbar2, 374, 0);
+				if(mainmenu == 3)blitAlphaImageToScreen(0, 0, 106, 272, taskbar3, 374, 0);
+			}
+
+			if(mainmenu2 == 2) {
+					blitAlphaImageToScreen(0, 0, 100, 272, taskbar0, 380, 0);
+					blitAlphaImageToScreen(0, 0, 266, 25, statusbar, 3, 244); 
+					blitAlphaImageToScreen(0, 0, 50, 25, exiton, 269, 244);
+			}
 			
-					screenblit(0,0,480,272,insert_umd);
-					flipScreen();
+			if (pad.Buttons & PSP_CTRL_UP) {
+				if (mainmenu2 == 1) {
+					if (mainmenu > 1) {
+						mainmenu--;
+						for(wait=0; wait<7; wait++) {
+							sceDisplayWaitVblankStart();
+						}
+					}
 				}
+			}	
 
-				while (h == 0) {
-					h = sceUmdCheckMedium(0);
-				}
-
-				h = sceUmdActivate(1, "disc0:");
-
-				scePowerSetClockFrequency(333, 333, 166);
-				sceKernelLoadExec("disc0:/PSP_GAME/SYSDIR/BOOT.BIN",0);
-			}
-
-			if (menu == 3) {
-				write_file("./ASURA_EFFECT_ON/system_plugin_bg.rco","flash0:/vsh/resource/system_plugin_bg.rco");
-
-				screenblit(0, 0, 480, 272, flash_complete);
-				flipScreen();
-
-			        for(i=0; i<50; i++) {
-		                	sceDisplayWaitVblankStart();
+			if (pad.Buttons & PSP_CTRL_DOWN) {
+				if (mainmenu2 == 1) {
+					if (mainmenu < 3) {
+						mainmenu++;
+						for(wait=0; wait<7; wait++) {
+							sceDisplayWaitVblankStart();
+						}
+					}
 				}
 			}
-			if (menu == 4) {
-				write_file("./ASURA_EFFECT_OFF/system_plugin_bg.rco","flash0:/vsh/resource/system_plugin_bg.rco");
-
-				screenblit(0, 0, 480, 272, flash_complete);
-				flipScreen();
-
-			        for(i=0; i<50; i++) {
-		                	sceDisplayWaitVblankStart();
+			if (pad.Buttons & PSP_CTRL_LEFT) {
+				if (mainmenu2 < 2) {
+					mainmenu2++;
+					for(wait=0; wait<7; wait++) {
+						 sceDisplayWaitVblankStart();
+					}
 				}
 			}
-			if (menu == 5) {
-				write_file("ms0:/01.bmp","flash0:/vsh/resource/01.bmp");
-				write_file("ms0:/02.bmp","flash0:/vsh/resource/02.bmp");
-				write_file("ms0:/03.bmp","flash0:/vsh/resource/03.bmp");
-				write_file("ms0:/04.bmp","flash0:/vsh/resource/04.bmp");
-				write_file("ms0:/05.bmp","flash0:/vsh/resource/05.bmp");
-				write_file("ms0:/06.bmp","flash0:/vsh/resource/06.bmp");
-				write_file("ms0:/07.bmp","flash0:/vsh/resource/07.bmp");
-				write_file("ms0:/08.bmp","flash0:/vsh/resource/08.bmp");
-				write_file("ms0:/09.bmp","flash0:/vsh/resource/09.bmp");
-				write_file("ms0:/10.bmp","flash0:/vsh/resource/10.bmp");
-				write_file("ms0:/11.bmp","flash0:/vsh/resource/11.bmp");
-				write_file("ms0:/12.bmp","flash0:/vsh/resource/12.bmp");
-
-				screenblit(0, 0, 480, 272, flash_complete);
-				flipScreen();
-
-			        for(i=0; i<50; i++) {
-		                	sceDisplayWaitVblankStart();
+			if (pad.Buttons & PSP_CTRL_RIGHT) {
+				if (mainmenu2 > 1) {
+					mainmenu2--;
+					for(wait=0; wait<7; wait++) {
+						 sceDisplayWaitVblankStart();
+					}
 				}
 			}
-			if (menu == 6) {
-				write_file("./DEFAULT_BG/01.bmp","flash0:/vsh/resource/01.bmp");
-				write_file("./DEFAULT_BG/02.bmp","flash0:/vsh/resource/02.bmp");
-				write_file("./DEFAULT_BG/03.bmp","flash0:/vsh/resource/03.bmp");
-				write_file("./DEFAULT_BG/04.bmp","flash0:/vsh/resource/04.bmp");
-				write_file("./DEFAULT_BG/05.bmp","flash0:/vsh/resource/05.bmp");
-				write_file("./DEFAULT_BG/06.bmp","flash0:/vsh/resource/06.bmp");
-				write_file("./DEFAULT_BG/07.bmp","flash0:/vsh/resource/07.bmp");
-				write_file("./DEFAULT_BG/08.bmp","flash0:/vsh/resource/08.bmp");
-				write_file("./DEFAULT_BG/09.bmp","flash0:/vsh/resource/09.bmp");
-				write_file("./DEFAULT_BG/10.bmp","flash0:/vsh/resource/10.bmp");
-				write_file("./DEFAULT_BG/11.bmp","flash0:/vsh/resource/11.bmp");
-				write_file("./DEFAULT_BG/12.bmp","flash0:/vsh/resource/12.bmp");
-
-				screenblit(0, 0, 480, 272, flash_complete);
-				flipScreen();
-
-			        for(i=0; i<50; i++) {
-		                	sceDisplayWaitVblankStart();
+			if (pad.Buttons & PSP_CTRL_CROSS) {
+				if (mainmenu2 == 2) break;
+				if (mainmenu2 == 1) {
+					if (mainmenu == 1) dialogbox = 2;
+					if (mainmenu == 2) dialogbox = 3;
+					if (mainmenu == 3) dialogbox = 4;
 				}
 			}
-			if (menu == 7) {
-				write_file("ms0:/topmenu_plugin.rco","flash0:/vsh/resource/topmenu_plugin.rco");
-
-				screenblit(0, 0, 480, 272, flash_complete);
-				flipScreen();
-
-			        for(i=0; i<50; i++) {
-		                	sceDisplayWaitVblankStart();
-				}
-			}
-			if (menu == 8) {
-				write_file("./DEFAULT_MENU/topmenu_plugin.rco","flash0:/vsh/resource/topmenu_plugin.rco");
-
-				screenblit(0, 0, 480, 272, flash_complete);
-				flipScreen();
-
-			        for(i=0; i<50; i++) {
-		                	sceDisplayWaitVblankStart();
-				}
-			}
-			if (menu == 9) {
-				break;
-			}
-		}	
+		}
+		flipScreen();
 	}
+		
 	sceKernelExitGame();
 	return 0;
 }
@@ -309,34 +564,23 @@ int SetupCallbacks(void) {
 	return thid;
 }
 
-void screenblit(int posx, int posy, int sizex, int sizey, Image* imagevar) {
-	int x = 0;
-        int y = 0;
-        sceDisplayWaitVblankStart();
-
-	while (x < sizex) {
-		while (y < sizey) {
-			blitAlphaImageToScreen(posx ,posy ,sizex , sizey, imagevar, x, y);
-			y += sizey;
-		}
-		x += sizex;
-		y = 0;
-	}
-}
-
 void check(const char* zFile){
 	int fd3;
 	fd3 = sceIoOpen(zFile, PSP_O_RDONLY, 0);
 	if(fd3 < 0) {
 		exist = 0;
-        }
+	   }
 	else {
-                exist = 1;
-        }
+			 exist = 1;
+	   }
 	sceIoClose(fd3);
 } 
 
-void write_file(const char *readpath, const char *writepath) {
+void write_file(const char *readpath, const char *writepath, Image* write, Image* writecomplete, Image* writefailed) {
+	int wait = 0;
+
+	blitAlphaImageToScreen(0, 0, 266, 25, write, 3, 244);
+	flipScreen();
 	check(readpath);
 	if(exist == 1) {
 		int fdin;
@@ -364,5 +608,14 @@ void write_file(const char *readpath, const char *writepath) {
 				sceIoClose(fdin);
 			}
 		}
+		blitAlphaImageToScreen(0, 0, 266, 25, writecomplete, 3, 244); 
+		flipScreen();
+	}
+	if(exist == 0) { 
+		blitAlphaImageToScreen(0, 0, 266, 25, writefailed, 3, 244); 
+		flipScreen();
+	}
+	for(wait=0; wait<15; wait++) {
+		sceDisplayWaitVblankStart();
 	}
 }
